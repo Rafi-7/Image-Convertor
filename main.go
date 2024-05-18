@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 func main() {
@@ -17,11 +18,17 @@ func main() {
 		return
 	}
 
+	var waitGroup sync.WaitGroup
 	for _, imagePath := range os.Args[1:] {
-		if err := ConvertToBW(imagePath); err != nil {
-			fmt.Printf("Failed to process %s : %v\n", imagePath, err)
-		}
+		waitGroup.Add(1)
+		go func(imagePath string) {
+			defer waitGroup.Done()
+			if err := ConvertToBW(imagePath); err != nil {
+				fmt.Printf("Failed to process %s : %v\n", imagePath, err)
+			}
+		}(imagePath)
 	}
+	waitGroup.Wait()
 }
 
 func ConvertToBW(imagePath string) error {
@@ -33,7 +40,7 @@ func ConvertToBW(imagePath string) error {
 
 	img, format, err := image.Decode(file)
 	if err != nil {
-		return fmt.Errorf("Error decoding image file : ", err)
+		return fmt.Errorf("Error decoding image file : %v", err)
 	}
 
 	bounds := img.Bounds()
@@ -67,21 +74,21 @@ func ConvertToBW(imagePath string) error {
 	}
 	defer outputFile.Close()
 
-	if format == "jpeg" {
+	switch format {
+	case "jpeg":
 		if err := jpeg.Encode(outputFile, grayImg, nil); err != nil {
 			return fmt.Errorf("Error Eencoding output file %s: %v\n", outputPath, err)
 		}
-	} else if format == "png" {
+	case "png":
 		if err := png.Encode(outputFile, grayImg); err != nil {
 			return fmt.Errorf("Error Eencoding output file %s: %v\n", outputPath, err)
 		}
-	} else {
+	default:
 		return fmt.Errorf("Unsupported image format %s: %v\n", imagePath, format)
 	}
 
 	fmt.Printf("Image %s converted to BW %s\n", imagePath, outputPath)
 	return nil
-
 }
 
 func generationOutputPath(inputPath, _ string) string {
